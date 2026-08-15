@@ -247,10 +247,17 @@ public class CameraSession {
                     }
                     params.setPictureSize(pictureSize.getWidth(), pictureSize.getHeight());
                     params.setPictureFormat(pictureFormat);
-                    params.setRecordingHint(true);
+                    params.setRecordingHint(false);
+                    try {
+                        if (params.isVideoStabilizationSupported()) {
+                            params.setVideoStabilization(false);
+                        }
+                    } catch (Exception e) {
+                        FileLog.e(e);
+                    }
                     maxZoom = params.getMaxZoom();
 
-                    String desiredMode = Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO;
+                    String desiredMode = Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE;
                     if (params.getSupportedFocusModes().contains(desiredMode)) {
                         params.setFocusMode(desiredMode);
                     } else {
@@ -349,7 +356,8 @@ public class CameraSession {
         if (camera != null) {
             try {
                 camera.setDisplayOrientation(currentOrientation);
-            } catch (Throwable ignore) {}
+            } catch (Throwable ignore) {
+            }
         }
         diffOrientation = currentOrientation - displayOrientation;
         if (diffOrientation < 0) {
@@ -578,7 +586,7 @@ public class CameraSession {
         return 0;
     }
 
-    public void setPreviewCallback(Camera.PreviewCallback callback){
+    public void setPreviewCallback(Camera.PreviewCallback callback) {
         cameraInfo.camera.setPreviewCallback(callback);
     }
 
