@@ -248,6 +248,22 @@ public class CameraSession {
                     params.setPictureSize(pictureSize.getWidth(), pictureSize.getHeight());
                     params.setPictureFormat(pictureFormat);
                     params.setRecordingHint(false);
+
+                    try {
+                        List<int[]> fpsRanges = params.getSupportedPreviewFpsRange();
+                        if (fpsRanges != null && !fpsRanges.isEmpty()) {
+                            int[] bestRange = fpsRanges.get(0);
+                            for (int[] range : fpsRanges) {
+                                if (range[0] >= bestRange[0] && range[1] >= bestRange[1]) {
+                                    bestRange = range;
+                                }
+                            }
+                            params.setPreviewFpsRange(bestRange[0], bestRange[1]);
+                        }
+                    } catch (Exception e) {
+                        FileLog.e(e);
+                    }
+
                     try {
                         if (params.isVideoStabilizationSupported()) {
                             params.setVideoStabilization(false);
@@ -287,6 +303,20 @@ public class CameraSession {
                     }
                     params.setFlashMode(currentFlashMode);
                     params.setZoom((int) (currentZoom * maxZoom));
+
+                    try {
+                        List<String> antibandingModes = params.getSupportedAntibanding();
+                        if (antibandingModes != null) {
+                            if (antibandingModes.contains(Camera.Parameters.ANTIBANDING_AUTO)) {
+                                params.setAntibanding(Camera.Parameters.ANTIBANDING_AUTO);
+                            } else if (antibandingModes.contains(Camera.Parameters.ANTIBANDING_50HZ)) {
+                                params.setAntibanding(Camera.Parameters.ANTIBANDING_50HZ); // Актуально для электросетей РФ
+                            }
+                        }
+                    } catch (Exception e) {
+                        FileLog.e(e);
+                    }
+
                     try {
                         camera.setParameters(params);
                     } catch (Exception e) {
@@ -515,7 +545,12 @@ public class CameraSession {
         boolean canGoHigh = CamcorderProfile.hasProfile(cameraInfo.cameraId, highProfile);
         boolean canGoLow = CamcorderProfile.hasProfile(cameraInfo.cameraId, CamcorderProfile.QUALITY_LOW);
         if (canGoHigh && (quality == 1 || !canGoLow)) {
-            recorder.setProfile(CamcorderProfile.get(cameraInfo.cameraId, highProfile));
+            CamcorderProfile profile = CamcorderProfile.get(cameraInfo.cameraId, highProfile);
+
+            profile.videoBitRate = 15_000_000;
+            profile.audioBitRate = 256_000;
+
+            recorder.setProfile(profile);
         } else if (canGoLow) {
             recorder.setProfile(CamcorderProfile.get(cameraInfo.cameraId, CamcorderProfile.QUALITY_LOW));
         } else {
