@@ -25,6 +25,19 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
+      - name: Cache C++ and Gradle build files
+        uses: actions/cache@v4
+        with:
+          path: |
+            .gradle/
+            TMessagesProj/.cxx/
+            TMessagesProj/build/
+            TMessagesProj_App/build/
+          # Ключ кэша обновляется при каждом коммите, но восстанавливается из ближайшего старого
+          key: ${{ runner.os }}-tg-build-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-tg-build-
+
       - name: Prepare Keystore and google-services.json
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -51,7 +64,7 @@ jobs:
       - name: Build PixelGram APK
         run: |
           chmod +x gradlew
-          ./gradlew :TMessagesProj_App:assembleAfatRelease -x test -x :TMessagesProj_AppTests:generateScheme
+          ./gradlew :TMessagesProj_App:assembleAfatRelease -x test -x :TMessagesProj_AppTests:generateScheme --build-cache
 
       - name: Prepare APK and Tag
         id: prep
