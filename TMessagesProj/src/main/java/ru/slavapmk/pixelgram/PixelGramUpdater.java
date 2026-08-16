@@ -1,5 +1,11 @@
 package ru.slavapmk.pixelgram;
 
+import android.app.Activity;
+import android.content.Intent;
+import android.net.Uri;
+import android.os.Build;
+import android.text.TextUtils;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.telegram.messenger.AndroidUtilities;
@@ -10,14 +16,21 @@ import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.Utilities;
 import org.telegram.tgnet.TLRPC;
+import org.telegram.ui.Components.BulletinFactory;
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 
 public class PixelGramUpdater {
-    public static String latestApkUrl = "";
+    public static String latestApkUrl = null; // Обязательный сброс
+
+    // Сохраняем ссылки для корректной отмены
+    private static volatile InputStream downloadStream;
+    private static volatile HttpURLConnection downloadConnection;
 
     public interface UpdateCallback {
         void onResult(TLRPC.TL_help_appUpdate update, boolean hasUpdate);
@@ -26,12 +39,14 @@ public class PixelGramUpdater {
 
     public static void check(UpdateCallback callback) {
         Utilities.globalQueue.postRunnable(() -> {
+            latestApkUrl = null;
             try {
-                // ВАЖНО: Замени "ТВОЙ_НИК" на свой логин GitHub
                 URL url = new URL("https://api.github.com/repos/slavapmk/PixelGram/releases/latest");
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("GET");
                 conn.setRequestProperty("Accept", "application/vnd.github.v3+json");
+                conn.setConnectTimeout(10000); // Таймаут 10 сек
+                conn.setReadTimeout(15000);
 
                 if (conn.getResponseCode() == 200) {
                     BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream()));
@@ -46,10 +61,20 @@ public class PixelGramUpdater {
 
                     JSONArray assets = json.getJSONArray("assets");
                     long size = 0;
-                    if (assets.length() > 0) {
-                        JSONObject asset = assets.getJSONObject(0);
-                        latestApkUrl = asset.getString("browser_download_url");
-                        size = asset.getLong("size");
+
+                    // Строгий поиск APK
+                    for (int i = 0; i < assets.length(); i++) {
+                        JSONObject asset = assets.getJSONObject(i);
+                        if (asset.getString("name").endsWith(".apk")) {
+                            latestApkUrl = asset.getString("browser_download_url");
+                            size = asset.optLong("size", 0);
+                            break;
+                        }
+                    }
+
+                    if (TextUtils.isEmpty(latestApkUrl)) {
+                        AndroidUtilities.runOnUIThread(callback::onError);
+                        return;
                     }
 
                     int remoteVersionCode = 0;
@@ -62,7 +87,6 @@ public class PixelGramUpdater {
                         FileLog.e("PixelGramUpdater: Ошибка парсинга тега " + tagName);
                     }
 
-                    // Сравниваем тег с текущей версией (из BuildVars)
                     int currentVersionCode = 0;
                     try {
                         android.content.pm.PackageInfo pInfo = ApplicationLoader.applicationContext
@@ -73,16 +97,15 @@ public class PixelGramUpdater {
                         FileLog.e(e);
                     }
 
-                    // Если версии не совпадают — генерируем фейковый апдейт для UI
                     if (remoteVersionCode > currentVersionCode && remoteVersionCode != 0) {
                         TLRPC.TL_help_appUpdate update = new TLRPC.TL_help_appUpdate();
-                        update.version = tagName.split("-")[0].replace("v", ""); // Оставляем только "10.14.0" для UI
+                        update.version = tagName.split("-")[0].replace("v", "");
                         update.text = body;
                         update.can_not_skip = false;
-
                         update.document = new TLRPC.TL_document();
                         update.document.size = size;
 
+                        // Фейковый документ исключительно для отрисовки UI
                         TLRPC.TL_documentAttributeFilename fileNameAttr = new TLRPC.TL_documentAttributeFilename();
                         fileNameAttr.file_name = "PixelGram_Update.apk";
                         update.document.attributes.add(fileNameAttr);
@@ -103,40 +126,43 @@ public class PixelGramUpdater {
 
     public static volatile boolean isDownloading = false;
     public static volatile float downloadProgress = 0f;
-    private static Thread downloadThread;
+    public static volatile boolean isDownloaded = false; // Флаг для UpdateLayout
 
     public static void startDownload(TLRPC.Document document, int account) {
-        if (isDownloading || android.text.TextUtils.isEmpty(latestApkUrl)) return;
+        if (isDownloading || TextUtils.isEmpty(latestApkUrl)) return;
         isDownloading = true;
+        isDownloaded = false;
         downloadProgress = 0f;
 
         String fileName = org.telegram.messenger.FileLoader.getAttachFileName(document);
-        // Сохраняем ровно туда, где файл будет искать openApkInstall
-        java.io.File destFile = org.telegram.messenger.FileLoader.getInstance(account).getPathToAttach(document, true);
+        // Качаем в безопасную песочницу, не трогая кэш Телеграма
+        File destFile = new File(ApplicationLoader.applicationContext.getExternalFilesDir(null), "PixelGram_Update.apk");
 
-        // Перерисовываем UI (кнопки поменяются на "Отмена")
         AndroidUtilities.runOnUIThread(() -> {
             NotificationCenter.getInstance(account).postNotificationName(NotificationCenter.updateInterfaces, MessagesController.UPDATE_MASK_ALL);
         });
 
-        downloadThread = new Thread(() -> {
+        new Thread(() -> {
             try {
                 URL url = new URL(latestApkUrl);
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setInstanceFollowRedirects(true);
-                conn.connect();
+                downloadConnection = (HttpURLConnection) url.openConnection();
+                downloadConnection.setInstanceFollowRedirects(true);
+                downloadConnection.setConnectTimeout(15000);
+                downloadConnection.setReadTimeout(30000);
+                downloadConnection.connect();
 
-                // GitHub Releases всегда редиректят скачивание на AWS-сервера
-                if (conn.getResponseCode() == HttpURLConnection.HTTP_MOVED_TEMP ||
-                        conn.getResponseCode() == HttpURLConnection.HTTP_MOVED_PERM ||
-                        conn.getResponseCode() == HttpURLConnection.HTTP_SEE_OTHER) {
-                    String redirectUrl = conn.getHeaderField("Location");
-                    conn = (HttpURLConnection) new URL(redirectUrl).openConnection();
-                    conn.connect();
+                if (downloadConnection.getResponseCode() == HttpURLConnection.HTTP_MOVED_TEMP ||
+                        downloadConnection.getResponseCode() == HttpURLConnection.HTTP_MOVED_PERM ||
+                        downloadConnection.getResponseCode() == HttpURLConnection.HTTP_SEE_OTHER) {
+                    String redirectUrl = downloadConnection.getHeaderField("Location");
+                    downloadConnection = (HttpURLConnection) new URL(redirectUrl).openConnection();
+                    downloadConnection.setConnectTimeout(15000);
+                    downloadConnection.setReadTimeout(30000);
+                    downloadConnection.connect();
                 }
 
-                int totalSize = conn.getContentLength();
-                java.io.InputStream input = conn.getInputStream();
+                int totalSize = downloadConnection.getContentLength();
+                downloadStream = downloadConnection.getInputStream();
                 java.io.FileOutputStream output = new java.io.FileOutputStream(destFile);
 
                 byte[] data = new byte[8192];
@@ -144,10 +170,10 @@ public class PixelGramUpdater {
                 int count;
                 long lastTime = System.currentTimeMillis();
 
-                while ((count = input.read(data)) != -1) {
+                while ((count = downloadStream.read(data)) != -1) {
                     if (!isDownloading) {
                         output.close();
-                        input.close();
+                        downloadStream.close();
                         destFile.delete();
                         return;
                     }
@@ -155,12 +181,17 @@ public class PixelGramUpdater {
                     output.write(data, 0, count);
 
                     long currentTime = System.currentTimeMillis();
-                    // Шлем события для UI каждые 40мс (≈25 FPS для плавного кружочка)
                     if (currentTime - lastTime > 40) {
                         lastTime = currentTime;
                         Long loadedSize = downloaded;
                         Long totalSizeLong = (long) totalSize;
-                        downloadProgress = (float) downloaded / totalSize;
+
+                        // Защита от отрицательного прогресса
+                        if (totalSize > 0) {
+                            downloadProgress = (float) downloaded / totalSize;
+                        } else {
+                            downloadProgress = 0f; // Indeterminate не поддерживается UI Телеги
+                        }
 
                         AndroidUtilities.runOnUIThread(() -> {
                             NotificationCenter.getInstance(account).postNotificationName(
@@ -172,20 +203,16 @@ public class PixelGramUpdater {
                 }
                 output.flush();
                 output.close();
-                input.close();
+                downloadStream.close();
 
                 isDownloading = false;
+                isDownloaded = true;
                 downloadProgress = 1f;
 
                 AndroidUtilities.runOnUIThread(() -> {
-                    // Файл загружен, обновляем UI на "Update Now"
+                    // Файл загружен. Больше не вызываем автоустановку! Ждем клика "Update Now"
                     NotificationCenter.getInstance(account).postNotificationName(NotificationCenter.fileLoaded, fileName, destFile);
                     NotificationCenter.getInstance(account).postNotificationName(NotificationCenter.updateInterfaces, MessagesController.UPDATE_MASK_ALL);
-
-                    // Автоматически триггерим системное окно установки
-                    if (org.telegram.ui.LaunchActivity.instance != null) {
-                        ApplicationLoader.applicationLoaderInstance.openApkInstall(org.telegram.ui.LaunchActivity.instance, document);
-                    }
                 });
 
             } catch (Exception e) {
@@ -196,13 +223,44 @@ public class PixelGramUpdater {
                 AndroidUtilities.runOnUIThread(() -> {
                     NotificationCenter.getInstance(account).postNotificationName(NotificationCenter.fileLoadFailed, fileName, 0);
                     NotificationCenter.getInstance(account).postNotificationName(NotificationCenter.updateInterfaces, MessagesController.UPDATE_MASK_ALL);
+
+                    // Показываем ошибку пользователю
+                    if (org.telegram.ui.LaunchActivity.instance != null) {
+                        BulletinFactory.of(org.telegram.ui.LaunchActivity.instance).createSimpleBulletin(
+                                org.telegram.messenger.R.raw.error, "Ошибка загрузки обновления").show();
+                    }
                 });
             }
-        });
-        downloadThread.start();
+        }).start();
     }
 
     public static void cancelDownload() {
         isDownloading = false;
+        try {
+            if (downloadStream != null) downloadStream.close();
+            if (downloadConnection != null) downloadConnection.disconnect();
+        } catch (Exception ignore) {}
+    }
+
+    // Собственный безопасный метод установки
+    public static void installApk(Activity activity) {
+        try {
+            File f = new File(ApplicationLoader.applicationContext.getExternalFilesDir(null), "PixelGram_Update.apk");
+            if (!f.exists()) return;
+
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+
+            if (Build.VERSION.SDK_INT >= 24) {
+                intent.setDataAndType(androidx.core.content.FileProvider.getUriForFile(
+                                activity, ApplicationLoader.getApplicationId() + ".provider", f),
+                        "application/vnd.android.package-archive");
+            } else {
+                intent.setDataAndType(Uri.fromFile(f), "application/vnd.android.package-archive");
+            }
+            activity.startActivity(intent);
+        } catch (Exception e) {
+            FileLog.e(e);
+        }
     }
 }
