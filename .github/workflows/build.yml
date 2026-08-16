@@ -31,7 +31,7 @@ jobs:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
           # 1. Декодируем keystore из base64 в файл
-          echo $KEYSTORE_BASE64 | base64 --decode > release.keystore
+          echo $KEYSTORE_BASE64 | base64 --decode > TMessagesProj/config/release.keystore
           
           # 2. Создаем файл google-services.json из секрета
           echo "$GOOGLE_SERVICES_JSON" > TMessagesProj_App/google-services.json
@@ -43,7 +43,6 @@ jobs:
         run: |
           # Телеграм читает ключи из gradle.properties, поэтому безопасно дописываем их туда
           cat << EOF >> gradle.properties
-          RELEASE_STORE_FILE=${{ github.workspace }}/release.keystore
           RELEASE_STORE_PASSWORD=${{ secrets.STORE_PASSWORD }}
           RELEASE_KEY_ALIAS=${{ secrets.KEY_ALIAS }}
           RELEASE_KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}
