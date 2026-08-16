@@ -3,13 +3,12 @@ name: Build PixelGram
 on:
   push:
     branches:
-      - master # Замени на main, если у тебя основная ветка называется main
+      - master
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
-    # Права нужны для автоматического создания релиза
     permissions:
       contents: write
 
@@ -17,7 +16,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # В твоих логах выше мелькала Java 21, поэтому ставим её
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
@@ -32,8 +30,7 @@ jobs:
             .gradle/
             TMessagesProj/.cxx/
             TMessagesProj/build/
-            TMessagesProj_App/build/
-          # Ключ кэша обновляется при каждом коммите, но восстанавливается из ближайшего старого
+            TMessagesProj_AppStandalone/build/
           key: ${{ runner.os }}-tg-build-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-tg-build-
@@ -43,18 +40,10 @@ jobs:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
-          # 1. Декодируем keystore из base64 в файл
-          echo $KEYSTORE_BASE64 | base64 --decode > TMessagesProj/config/release.keystore
-          
-          # 2. Создаем файл google-services.json из секрета
-          echo "$GOOGLE_SERVICES_JSON" > TMessagesProj_App/google-services.json
-          
-          # Если сборка попросит пустой Huawei-конфиг, можно раскомментировать строку ниже:
-          # echo "{}" > TMessagesProj_AppHuawei/agconnect-services.json
-
+          echo $KEYSTORE_BASE64 | base64 --decode > TMessagesProj/config/release.keystore          
+          echo "$GOOGLE_SERVICES_JSON" > google-services.json
       - name: Configure Signing in gradle.properties
         run: |
-          # Телеграм читает ключи из gradle.properties, поэтому безопасно дописываем их туда
           cat << EOF >> gradle.properties
           RELEASE_STORE_PASSWORD=${{ secrets.STORE_PASSWORD }}
           RELEASE_KEY_ALIAS=${{ secrets.KEY_ALIAS }}
@@ -69,8 +58,7 @@ jobs:
       - name: Prepare APK and Tag
         id: prep
         run: |
-          # Ищем собранный APK
-          APK_PATH=$(find TMessagesProj_App/build/outputs/apk/afat/release -name "*.apk" | head -n 1)
+          APK_PATH=$(find TMessagesProj_AppStandalone/build/outputs/apk/afat/release -name "*.apk" | head -n 1)
           mv "$APK_PATH" PixelGram.apk
           
           # Читаем версию напрямую из TMessagesProj/build.gradle
