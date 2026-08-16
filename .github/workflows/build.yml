@@ -69,26 +69,19 @@ jobs:
       - name: Prepare APK and Tag
         id: prep
         run: |
-          # Ищем собранный APK и переименовываем
+          # Ищем собранный APK
           APK_PATH=$(find TMessagesProj_App/build/outputs/apk/afat/release -name "*.apk" | head -n 1)
           mv "$APK_PATH" PixelGram.apk
           
-          # Достаем название коммита
-          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          # Читаем версию напрямую из TMessagesProj/build.gradle
+          VERSION_NAME=$(grep -oP 'versionName = "\K[^"]+' TMessagesProj/build.gradle)
+          VERSION_CODE=$(grep -oP 'versionCode = \K\d+' TMessagesProj/build.gradle)
           
-          # Делаем из названия безопасный тег (меняем пробелы на дефисы, убираем спецсимволы)
-          SAFE_TAG=$(echo "$COMMIT_MSG" | head -n 1 | tr '[:upper:]' '[:lower:]' | sed -e 's/[^a-z0-9]/-/g' -e 's/--*/-/g' -e 's/^-//' -e 's/-$//')
-          
-          # Если коммит был пустой или из одних спецсимволов, используем хэш коммита
-          if [ -z "$SAFE_TAG" ]; then
-            SAFE_TAG=${GITHUB_SHA::7}
-          fi
-          
-          # Добавляем короткий хэш в конец, чтобы избежать ошибки, если ты сделаешь два коммита с одинаковым названием
-          FINAL_TAG="${SAFE_TAG}-${GITHUB_SHA::5}"
+          # Формируем красивый тег, например: v10.14.0-41410
+          FINAL_TAG="v${VERSION_NAME}-${VERSION_CODE}"
           
           echo "TAG_NAME=$FINAL_TAG" >> $GITHUB_ENV
-          echo "RELEASE_NAME=$COMMIT_MSG" >> $GITHUB_ENV
+          echo "RELEASE_NAME=PixelGram $VERSION_NAME" >> $GITHUB_ENV
 
       - name: Create Release
         uses: softprops/action-gh-release@v2

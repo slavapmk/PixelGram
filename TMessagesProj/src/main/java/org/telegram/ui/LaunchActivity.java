@@ -258,6 +258,8 @@ import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
+import ru.slavapmk.pixelgram.PixelGramUpdater;
+
 public class LaunchActivity extends BasePermissionsActivity implements INavigationLayout.INavigationLayoutDelegate, NotificationCenter.NotificationCenterDelegate, DialogsActivity.DialogsActivityDelegate, IPipActivity {
     public final static String EXTRA_FORCE_NOT_INTERNAL_APPS = "force_not_internal_apps";
     public final static String EXTRA_FORCE_REQUEST = "force_request";
@@ -5994,13 +5996,19 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         if (req.source == null) {
             req.source = "";
         }
+
         final int accountNum = currentAccount;
-        int reqId = ConnectionsManager.getInstance(currentAccount).sendRequest(req, (response, error) -> {
-            SharedConfig.lastUpdateCheckTime = System.currentTimeMillis();
-            SharedConfig.saveConfig();
-            if (response instanceof TLRPC.TL_help_appUpdate) {
-                final TLRPC.TL_help_appUpdate res = (TLRPC.TL_help_appUpdate) response;
-                AndroidUtilities.runOnUIThread(() -> {
+        if (progress != null) {
+            progress.init();
+        }
+
+        PixelGramUpdater.check(new PixelGramUpdater.UpdateCallback() {
+            @Override
+            public void onResult(TLRPC.TL_help_appUpdate res, boolean hasUpdate) {
+                SharedConfig.lastUpdateCheckTime = System.currentTimeMillis();
+                SharedConfig.saveConfig();
+
+                if (hasUpdate && res != null) {
                     if (SharedConfig.pendingAppUpdate != null && SharedConfig.pendingAppUpdate.version.equals(res.version)) {
                         return;
                     }
@@ -6022,9 +6030,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                             }
                         }
                     }
-                });
-            } else if (response instanceof TLRPC.TL_help_noAppUpdate) {
-                AndroidUtilities.runOnUIThread(() -> {
+                } else {
                     if (progress != null) {
                         progress.end();
                         BaseFragment fragment = getLastFragment();
@@ -6032,23 +6038,20 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                             BulletinFactory.of(fragment).createSimpleBulletin(R.raw.chats_infotip, LocaleController.getString(R.string.YourVersionIsLatest)).show();
                         }
                     }
-                });
-            } else if (error != null) {
-                AndroidUtilities.runOnUIThread(() -> {
-                    if (progress != null) {
-                        progress.end();
-                        BaseFragment fragment = getLastFragment();
-                        if (fragment != null) {
-                            BulletinFactory.of(fragment).showForError(error);
-                        }
+                }
+            }
+
+            @Override
+            public void onError() {
+                if (progress != null) {
+                    progress.end();
+                    BaseFragment fragment = getLastFragment();
+                    if (fragment != null) {
+                        BulletinFactory.of(fragment).createSimpleBulletin(R.raw.chats_infotip, "Ошибка при проверке обновлений PixelGram").show();
                     }
-                });
+                }
             }
         });
-        if (progress != null) {
-            progress.init();
-            progress.onCancel(() -> ConnectionsManager.getInstance(currentAccount).cancelRequest(reqId, true));
-        }
     }
 
     public Dialog showAlertDialog(AlertDialog.Builder builder) {
