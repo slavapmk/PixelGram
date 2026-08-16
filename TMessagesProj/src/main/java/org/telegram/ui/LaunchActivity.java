@@ -6010,6 +6010,9 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
 
                 if (hasUpdate && res != null) {
                     if (SharedConfig.pendingAppUpdate != null && SharedConfig.pendingAppUpdate.version.equals(res.version)) {
+                        if (progress != null) {
+                            progress.end();
+                        }
                         return;
                     }
                     final boolean newVersionAvailable = SharedConfig.setNewAppVersionAvailable(res);

@@ -247,21 +247,20 @@ public class CameraSession {
                     }
                     params.setPictureSize(pictureSize.getWidth(), pictureSize.getHeight());
                     params.setPictureFormat(pictureFormat);
-                    params.setRecordingHint(false);
+                    params.setRecordingHint(true);
 
-                    try {
-                        List<int[]> fpsRanges = params.getSupportedPreviewFpsRange();
-                        if (fpsRanges != null && !fpsRanges.isEmpty()) {
-                            int[] bestRange = fpsRanges.get(0);
-                            for (int[] range : fpsRanges) {
-                                if (range[0] >= bestRange[0] && range[1] >= bestRange[1]) {
-                                    bestRange = range;
-                                }
-                            }
-                            params.setPreviewFpsRange(bestRange[0], bestRange[1]);
+                    List<int[]> fpsRanges = params.getSupportedPreviewFpsRange();
+
+                    int[] selected = null;
+                    for (int[] range : fpsRanges) {
+                        if (range[0] <= 30000 && range[1] >= 30000) {
+                            selected = range;
+                            break;
                         }
-                    } catch (Exception e) {
-                        FileLog.e(e);
+                    }
+
+                    if (selected != null) {
+                        params.setPreviewFpsRange(selected[0], selected[1]);
                     }
 
                     try {

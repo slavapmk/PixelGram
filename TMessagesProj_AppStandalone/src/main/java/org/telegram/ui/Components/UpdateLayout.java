@@ -70,14 +70,19 @@ public class UpdateLayout extends IUpdateLayout {
                 return;
             }
             if (updateLayoutIcon.getIcon() == MediaActionDrawable.ICON_DOWNLOAD) {
+                // 1. Если иконка скачивания — запускаем загрузку
                 ru.slavapmk.pixelgram.PixelGramUpdater.startDownload(SharedConfig.pendingAppUpdate.document, currentAccount);
-                updateAppUpdateViews(currentAccount,  true);
+                updateAppUpdateViews(currentAccount, true);
+
             } else if (updateLayoutIcon.getIcon() == MediaActionDrawable.ICON_CANCEL) {
+                // 2. Если иконка отмены — отменяем загрузку
                 ru.slavapmk.pixelgram.PixelGramUpdater.cancelDownload();
                 updateAppUpdateViews(currentAccount, true);
+
             } else {
-                // Если файл уже скачан, вызываем метод из ApplicationLoaderImpl
-                org.telegram.messenger.ApplicationLoader.applicationLoaderInstance.openApkInstall(activity, SharedConfig.pendingAppUpdate.document);
+                // 3. ИНАЧЕ (это тот самый else) — файл уже скачан,
+                // поэтому по клику запускаем установку APK
+                ru.slavapmk.pixelgram.PixelGramUpdater.installApk(activity);
             }
         });
 
@@ -136,12 +141,16 @@ public class UpdateLayout extends IUpdateLayout {
                 setUpdateText(LocaleController.getString(R.string.AppUpdateNow), animated);
                 showSize = false;
             } else {
-                if (FileLoader.getInstance(currentAccount).isLoadingFile(fileName) || ru.slavapmk.pixelgram.PixelGramUpdater.isDownloading) {
+                if (ru.slavapmk.pixelgram.PixelGramUpdater.isDownloading) {
                     updateLayoutIcon.setIcon(MediaActionDrawable.ICON_CANCEL, true, animated);
                     updateLayoutIcon.setProgress(0, false);
-                    // Берем прогресс из нашего загрузчика, если он активен
-                    Float p = ru.slavapmk.pixelgram.PixelGramUpdater.isDownloading ? ru.slavapmk.pixelgram.PixelGramUpdater.downloadProgress : ImageLoader.getInstance().getFileProgress(fileName);
+                    Float p = ru.slavapmk.pixelgram.PixelGramUpdater.downloadProgress;
                     setUpdateText(LocaleController.formatString(R.string.AppUpdateDownloading, (int) ((p != null ? p : 0.0f) * 100)), animated);
+                    showSize = false;
+                } else if (ru.slavapmk.pixelgram.PixelGramUpdater.isDownloaded) {
+                    // Файл уже скачан нами, меняем UI
+                    updateLayoutIcon.setIcon(MediaActionDrawable.ICON_UPDATE, true, animated);
+                    setUpdateText(LocaleController.getString(R.string.AppUpdateNow), animated);
                     showSize = false;
                 } else {
                     updateLayoutIcon.setIcon(MediaActionDrawable.ICON_DOWNLOAD, true, animated);

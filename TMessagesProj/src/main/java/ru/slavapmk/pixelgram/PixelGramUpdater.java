@@ -34,6 +34,7 @@ public class PixelGramUpdater {
 
     public interface UpdateCallback {
         void onResult(TLRPC.TL_help_appUpdate update, boolean hasUpdate);
+
         void onError();
     }
 
@@ -62,10 +63,9 @@ public class PixelGramUpdater {
                     JSONArray assets = json.getJSONArray("assets");
                     long size = 0;
 
-                    // Строгий поиск APK
                     for (int i = 0; i < assets.length(); i++) {
                         JSONObject asset = assets.getJSONObject(i);
-                        if (asset.getString("name").endsWith(".apk")) {
+                        if ("PixelGram.apk".equals(asset.getString("name"))) {
                             latestApkUrl = asset.getString("browser_download_url");
                             size = asset.optLong("size", 0);
                             break;
@@ -135,8 +135,13 @@ public class PixelGramUpdater {
         downloadProgress = 0f;
 
         String fileName = org.telegram.messenger.FileLoader.getAttachFileName(document);
-        // Качаем в безопасную песочницу, не трогая кэш Телеграма
-        File destFile = new File(ApplicationLoader.applicationContext.getExternalFilesDir(null), "PixelGram_Update.apk");
+        // Качаем в безопасную песочницу, проверяя на null
+        File extDir = ApplicationLoader.applicationContext.getExternalFilesDir(null);
+        if (extDir == null) {
+            isDownloading = false;
+            return;
+        }
+        File destFile = new File(extDir, "PixelGram_Update.apk");
 
         AndroidUtilities.runOnUIThread(() -> {
             NotificationCenter.getInstance(account).postNotificationName(NotificationCenter.updateInterfaces, MessagesController.UPDATE_MASK_ALL);
@@ -224,12 +229,18 @@ public class PixelGramUpdater {
                     NotificationCenter.getInstance(account).postNotificationName(NotificationCenter.fileLoadFailed, fileName, 0);
                     NotificationCenter.getInstance(account).postNotificationName(NotificationCenter.updateInterfaces, MessagesController.UPDATE_MASK_ALL);
 
-                    // Показываем ошибку пользователю
-                    if (org.telegram.ui.LaunchActivity.instance != null) {
-                        BulletinFactory.of(org.telegram.ui.LaunchActivity.instance).createSimpleBulletin(
-                                org.telegram.messenger.R.raw.error, "Ошибка загрузки обновления").show();
-                    }
+                    BulletinFactory.global().createSimpleBulletin(
+                            org.telegram.messenger.R.raw.error, "Ошибка загрузки обновления"
+                    ).show();
                 });
+            } finally {
+                try {
+                    if (downloadStream != null) downloadStream.close();
+                    if (downloadConnection != null) downloadConnection.disconnect();
+                } catch (Exception ignore) {
+                }
+                downloadStream = null;
+                downloadConnection = null;
             }
         }).start();
     }
@@ -239,13 +250,18 @@ public class PixelGramUpdater {
         try {
             if (downloadStream != null) downloadStream.close();
             if (downloadConnection != null) downloadConnection.disconnect();
-        } catch (Exception ignore) {}
+        } catch (Exception ignore) {
+        }
+        downloadStream = null;
+        downloadConnection = null;
     }
 
     // Собственный безопасный метод установки
     public static void installApk(Activity activity) {
         try {
-            File f = new File(ApplicationLoader.applicationContext.getExternalFilesDir(null), "PixelGram_Update.apk");
+            File extDir = ApplicationLoader.applicationContext.getExternalFilesDir(null);
+            if (extDir == null) return;
+            File f = new File(extDir, "PixelGram_Update.apk");
             if (!f.exists()) return;
 
             Intent intent = new Intent(Intent.ACTION_VIEW);

@@ -3631,7 +3631,8 @@ public class InstantCameraView extends FrameLayout implements NotificationCenter
                     "   vec4 textColor = texture2D(sTexture, vTextureCoord);\n" +
 
                     "   // --- SHARPENING ---\n" +
-                    "   vec2 c_onePixel = 1.0 / preview;\n" +
+                    "   // Защита от деления на ноль, если preview не пришел в uniform\n" +
+                    "   vec2 c_onePixel = vec2(1.0) / max(preview, vec2(1.0));\n" +
                     "   vec2 offset = c_onePixel * 1.5;\n" +
                     "   vec3 top    = texture2D(sTexture, vTextureCoord + vec2(0.0, offset.y)).rgb;\n" +
                     "   vec3 bottom = texture2D(sTexture, vTextureCoord + vec2(0.0, -offset.y)).rgb;\n" +
@@ -3725,7 +3726,8 @@ public class InstantCameraView extends FrameLayout implements NotificationCenter
                     "   vec4 textColor = texture2D(sTexture, vTextureCoord);\n" +
 
                     "   // --- SHARPENING ---\n" +
-                    "   vec2 c_onePixel = 1.0 / preview;\n" +
+                    "   // Защита от деления на ноль, если preview не пришел в uniform\n" +
+                    "   vec2 c_onePixel = vec2(1.0) / max(preview, vec2(1.0));\n" +
                     "   vec2 offset = c_onePixel * 1.5;\n" +
                     "   vec3 top    = texture2D(sTexture, vTextureCoord + vec2(0.0, offset.y)).rgb;\n" +
                     "   vec3 bottom = texture2D(sTexture, vTextureCoord + vec2(0.0, -offset.y)).rgb;\n" +

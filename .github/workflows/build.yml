@@ -58,12 +58,21 @@ jobs:
       - name: Prepare APK and Tag
         id: prep
         run: |
-          APK_PATH=$(find TMessagesProj_AppStandalone/build/outputs/apk/afat/release -name "*.apk" | head -n 1)
+          # Ищем APK везде внутри outputs, исключая возможные промежуточные (unaligned) файлы
+          APK_PATH=$(find TMessagesProj_AppStandalone/build/outputs -type f -name "*.apk" | grep -v "unaligned" | head -n 1)
+          
+          # Защита: если файл не найден, выводим структуру директорий для дебага и падаем понятно
+          if [ -z "$APK_PATH" ]; then
+            echo "APK не найден! Вывожу структуру папок:"
+            ls -R TMessagesProj_AppStandalone/build/outputs
+            exit 1
+          fi
+          
           mv "$APK_PATH" PixelGram.apk
           
-          # Читаем версию напрямую из TMessagesProj/build.gradle
-          VERSION_NAME=$(grep -oP 'versionName = "\K[^"]+' TMessagesProj/build.gradle)
-          VERSION_CODE=$(grep -oP 'versionCode = \K\d+' TMessagesProj/build.gradle)
+          # Читаем версию независимо от того, есть там знак '=' или просто пробел
+          VERSION_NAME=$(grep -oP 'versionName\s*=?\s*"\K[^"]+' TMessagesProj/build.gradle)
+          VERSION_CODE=$(grep -oP 'versionCode\s*=?\s*\K\d+' TMessagesProj/build.gradle)
           
           # Формируем красивый тег, например: v10.14.0-41410
           FINAL_TAG="v${VERSION_NAME}-${VERSION_CODE}"
