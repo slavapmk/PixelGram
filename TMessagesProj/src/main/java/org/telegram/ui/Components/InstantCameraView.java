@@ -216,11 +216,15 @@ public class InstantCameraView extends FrameLayout implements NotificationCenter
 
     private static final String FRAGMENT_SCREEN_SHADER =
             "#extension GL_OES_EGL_image_external : require\n" +
-                    "precision lowp float;\n" +
+                    "precision mediump float;\n" +
                     "varying vec2 vTextureCoord;\n" +
                     "uniform samplerExternalOES sTexture;\n" +
                     "void main() {\n" +
-                    "   gl_FragColor = texture2D(sTexture, vTextureCoord);\n" +
+                    "   vec4 color = texture2D(sTexture, vTextureCoord);\n" +
+                    "   color.rgb = pow(color.rgb, vec3(1.22));\n" +
+                    "   float luminance = dot(color.rgb, vec3(0.299, 0.587, 0.114));\n" +
+                    "   color.rgb = mix(vec3(luminance), color.rgb, 1.48);\n" +
+                    "   gl_FragColor = color;\n" +
                     "}\n";
 
     private FloatBuffer vertexBuffer;
@@ -3601,6 +3605,9 @@ public class InstantCameraView extends FrameLayout implements NotificationCenter
                     "uniform samplerExternalOES sTexture;\n" +
                     "void main() {\n" +
                     "   vec4 textColor = texture2D(sTexture, vTextureCoord);\n" +
+                    "   textColor.rgb = pow(textColor.rgb, vec3(1.22));\n" +
+                    "   float luminance = dot(textColor.rgb, vec3(0.299, 0.587, 0.114));\n" +
+                    "   textColor.rgb = mix(vec3(luminance), textColor.rgb, 1.48);\n" +
                     "   vec2 coord = resolution * 0.5;\n" +
                     "   float radius = 0.51 * resolution.x;\n" +
                     "   float d = length(coord - gl_FragCoord.xy) - radius;\n" +
@@ -3639,7 +3646,11 @@ public class InstantCameraView extends FrameLayout implements NotificationCenter
 
                 "       vec4 x1 = mix(tl, tr, frac.x);\n" +
                 "       vec4 x2 = mix(bl, br, frac.x);\n" +
-                "       gl_FragColor = mix(x1, x2, frac.y) * alpha;" +
+                "       vec3 finalColor = mix(x1.rgb, x2.rgb, frac.y);\n" +
+                "       finalColor = pow(finalColor, vec3(1.22));\n" +
+                "       float lum = dot(finalColor, vec3(0.299, 0.587, 0.114));\n" +
+                "       finalColor = mix(vec3(lum), finalColor, 1.48);\n" +
+                "       gl_FragColor = vec4(finalColor, 1.0) * alpha;" +
                 "   } else {\n" +
                 "       gl_FragColor = vec4(1, 1, 1, alpha);\n" +
                 "   }\n" +
@@ -3657,6 +3668,9 @@ public class InstantCameraView extends FrameLayout implements NotificationCenter
                     "uniform samplerExternalOES sTexture;\n" +
                     "void main() {\n" +
                     "   vec4 textColor = texture2D(sTexture, vTextureCoord);\n" +
+                    "   textColor.rgb = pow(textColor.rgb, vec3(1.22));\n" +
+                    "   float luminance = dot(textColor.rgb, vec3(0.299, 0.587, 0.114));\n" +
+                    "   textColor.rgb = mix(vec3(luminance), textColor.rgb, 1.48);\n" +
                     "   gl_FragColor = vec4(textColor.rgb * alpha, alpha);\n" +
                     "}\n";
         }
@@ -3681,7 +3695,11 @@ public class InstantCameraView extends FrameLayout implements NotificationCenter
                 "   vec4 br = texture2D(sTexture, pixel + vec2(c_onePixel.x, c_onePixel.y));\n" +
                 "   vec4 x1 = mix(tl, tr, frac.x);\n" +
                 "   vec4 x2 = mix(bl, br, frac.x);\n" +
-                "   gl_FragColor = mix(x1, x2, frac.y) * alpha;\n" +
+                "   vec3 finalColor = mix(x1.rgb, x2.rgb, frac.y);\n" +
+                "   finalColor = pow(finalColor, vec3(1.22));\n" +
+                "   float lum = dot(finalColor, vec3(0.299, 0.587, 0.114));\n" +
+                "   finalColor = mix(vec3(lum), finalColor, 1.48);\n" +
+                "   gl_FragColor = vec4(finalColor, 1.0) * alpha;\n" +
                 "}\n";
     }
 
