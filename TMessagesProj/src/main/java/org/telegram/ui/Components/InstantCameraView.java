@@ -160,7 +160,7 @@ public class InstantCameraView extends FrameLayout implements NotificationCenter
 
     private volatile boolean cameraTextureAvailable;
     private final int[] position = new int[2];
-    private final int[] cameraTexture = new int[] { Integer.MIN_VALUE, Integer.MIN_VALUE };
+    private final int[] cameraTexture = new int[]{Integer.MIN_VALUE, Integer.MIN_VALUE};
     private final int[] oldCameraTexture = new int[1];
     private float cameraTextureAlpha = 1.0f;
 
@@ -221,9 +221,26 @@ public class InstantCameraView extends FrameLayout implements NotificationCenter
                     "uniform samplerExternalOES sTexture;\n" +
                     "void main() {\n" +
                     "   vec4 color = texture2D(sTexture, vTextureCoord);\n" +
-                    "   color.rgb = pow(color.rgb, vec3(1.22));\n" +
+
+                    "   // --- SHARPENING (Экранное превью) ---\n" +
+                    "   // Хардкодим размер пикселя, так как разрешение сюда не передается\n" +
+                    "   vec2 offset = vec2(1.0 / 512.0) * 1.5;\n" +
+                    "   vec3 top    = texture2D(sTexture, vTextureCoord + vec2(0.0, offset.y)).rgb;\n" +
+                    "   vec3 bottom = texture2D(sTexture, vTextureCoord + vec2(0.0, -offset.y)).rgb;\n" +
+                    "   vec3 left   = texture2D(sTexture, vTextureCoord + vec2(-offset.x, 0.0)).rgb;\n" +
+                    "   vec3 right  = texture2D(sTexture, vTextureCoord + vec2(offset.x, 0.0)).rgb;\n" +
+
+                    "   float sharp = 0.25;\n" +
+                    "   color.rgb = color.rgb * (1.0 + 4.0 * sharp) - (top + bottom + left + right) * sharp;\n" +
+                    "   color.rgb = clamp(color.rgb, 0.0, 1.0);\n" +
+
+                    "   // --- COLOR CORRECTION ---\n" +
+                    "   color.rgb = pow(color.rgb, vec3(1.12));\n" +
                     "   float luminance = dot(color.rgb, vec3(0.299, 0.587, 0.114));\n" +
-                    "   color.rgb = mix(vec3(luminance), color.rgb, 1.48);\n" +
+                    "   color.r = mix(luminance, color.r, 1.18);\n" +
+                    "   color.g = mix(luminance, color.g, 1.25);\n" +
+                    "   color.b = mix(luminance, color.b, 1.30);\n" +
+
                     "   gl_FragColor = color;\n" +
                     "}\n";
 
@@ -445,6 +462,7 @@ public class InstantCameraView extends FrameLayout implements NotificationCenter
     private Boolean wasFlashing;
     private boolean flashing;
     private boolean frontFlashing;
+
     private void updateFlash() {
         final boolean shouldFrontFlash = flashing && recording && isFrontface;
         if (frontFlashing != shouldFrontFlash) {
@@ -634,6 +652,7 @@ public class InstantCameraView extends FrameLayout implements NotificationCenter
     }
 
     private boolean setVisibilityFromPause;
+
     @Override
     public void setVisibility(int visibility) {
         super.setVisibility(visibility);
@@ -693,7 +712,8 @@ public class InstantCameraView extends FrameLayout implements NotificationCenter
             showCamera(true);
             try {
                 performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
-            } catch (Exception ignore) {}
+            } catch (Exception ignore) {
+            }
             AndroidUtilities.lockOrientation(delegate.getParentActivity());
             invalidate();
             NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.recordResumed);
@@ -2318,8 +2338,8 @@ public class InstantCameraView extends FrameLayout implements NotificationCenter
             }
 
             started = true;
-            int resolution = MessagesController.getInstance(currentAccount).roundVideoSize;
-            int bitrate = MessagesController.getInstance(currentAccount).roundVideoBitrate * 1024;
+            int resolution = 512;
+            int bitrate = 2500000;
             AndroidUtilities.runOnUIThread(() -> {
                 NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.stopAllHeavyOperations, 512);
             });
@@ -2378,6 +2398,7 @@ public class InstantCameraView extends FrameLayout implements NotificationCenter
         }
 
         long prevTimestamp;
+
         public void frameAvailable(SurfaceTexture st, Integer cameraId, long timestampInternal) {
             synchronized (sync) {
                 if (!ready) {
@@ -3016,10 +3037,12 @@ public class InstantCameraView extends FrameLayout implements NotificationCenter
                 FileLoader.getInstance(currentAccount).cancelFileUpload(videoFile.getAbsolutePath(), false);
                 try {
                     fileToWrite.delete();
-                } catch (Throwable ignore) {}
+                } catch (Throwable ignore) {
+                }
                 try {
                     videoFile.delete();
-                } catch (Throwable ignore) {}
+                } catch (Throwable ignore) {
+                }
             } else {
                 if (runDone && (send != ENCODER_SEND_SEND || !sentMedia)) {
                     sentMedia = true;
@@ -3258,7 +3281,8 @@ public class InstantCameraView extends FrameLayout implements NotificationCenter
                     }
                     try {
                         performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
-                    } catch (Exception ignore) {}
+                    } catch (Exception ignore) {
+                    }
                     AndroidUtilities.lockOrientation(delegate.getParentActivity());
                     recordPlusTime = fromPause ? recordedTime : 0;
                     recordStartTime = System.currentTimeMillis();
@@ -3605,14 +3629,30 @@ public class InstantCameraView extends FrameLayout implements NotificationCenter
                     "uniform samplerExternalOES sTexture;\n" +
                     "void main() {\n" +
                     "   vec4 textColor = texture2D(sTexture, vTextureCoord);\n" +
-                    "   textColor.rgb = pow(textColor.rgb, vec3(1.22));\n" +
+
+                    "   // --- SHARPENING ---\n" +
+                    "   vec2 c_onePixel = 1.0 / preview;\n" +
+                    "   vec2 offset = c_onePixel * 1.5;\n" +
+                    "   vec3 top    = texture2D(sTexture, vTextureCoord + vec2(0.0, offset.y)).rgb;\n" +
+                    "   vec3 bottom = texture2D(sTexture, vTextureCoord + vec2(0.0, -offset.y)).rgb;\n" +
+                    "   vec3 left   = texture2D(sTexture, vTextureCoord + vec2(-offset.x, 0.0)).rgb;\n" +
+                    "   vec3 right  = texture2D(sTexture, vTextureCoord + vec2(offset.x, 0.0)).rgb;\n" +
+                    "   float sharp = 0.45;\n" +
+                    "   textColor.rgb = textColor.rgb * (1.0 + 4.0 * sharp) - (top + bottom + left + right) * sharp;\n" +
+                    "   textColor.rgb = clamp(textColor.rgb, 0.0, 1.0);\n" +
+
+                    "   // --- COLOR CORRECTION ---\n" +
+                    "   textColor.rgb = pow(textColor.rgb, vec3(1.12));\n" +
                     "   float luminance = dot(textColor.rgb, vec3(0.299, 0.587, 0.114));\n" +
-                    "   textColor.rgb = mix(vec3(luminance), textColor.rgb, 1.48);\n" +
+                    "   textColor.r = mix(luminance, textColor.r, 1.18);\n" +
+                    "   textColor.g = mix(luminance, textColor.g, 1.25);\n" +
+                    "   textColor.b = mix(luminance, textColor.b, 1.30);\n" +
+
                     "   vec2 coord = resolution * 0.5;\n" +
                     "   float radius = 0.51 * resolution.x;\n" +
                     "   float d = length(coord - gl_FragCoord.xy) - radius;\n" +
                     "   float t = clamp(d, 0.0, 1.0);\n" +
-                    "   vec3 color = mix(textColor.rgb, vec3(1, 1, 1), t);\n" +
+                    "   vec3 color = mix(textColor.rgb, vec3(1.0, 1.0, 1.0), t);\n" +
                     "   gl_FragColor = vec4(color * alpha, alpha);\n" +
                     "}\n";
         }
@@ -3647,12 +3687,27 @@ public class InstantCameraView extends FrameLayout implements NotificationCenter
                 "       vec4 x1 = mix(tl, tr, frac.x);\n" +
                 "       vec4 x2 = mix(bl, br, frac.x);\n" +
                 "       vec3 finalColor = mix(x1.rgb, x2.rgb, frac.y);\n" +
-                "       finalColor = pow(finalColor, vec3(1.22));\n" +
+
+                "       // --- SHARPENING ---\n" +
+                "       vec2 offset = c_onePixel * 1.5;\n" +
+                "       vec3 top    = texture2D(sTexture, uv + vec2(0.0, offset.y)).rgb;\n" +
+                "       vec3 bottom = texture2D(sTexture, uv + vec2(0.0, -offset.y)).rgb;\n" +
+                "       vec3 left   = texture2D(sTexture, uv + vec2(-offset.x, 0.0)).rgb;\n" +
+                "       vec3 right  = texture2D(sTexture, uv + vec2(offset.x, 0.0)).rgb;\n" +
+                "       float sharp = 0.65;\n" +
+                "       finalColor = finalColor * (1.0 + 4.0 * sharp) - (top + bottom + left + right) * sharp;\n" +
+                "       finalColor = clamp(finalColor, 0.0, 1.0);\n" +
+
+                "       // --- COLOR CORRECTION ---\n" +
+                "       finalColor = pow(finalColor, vec3(1.12));\n" +
                 "       float lum = dot(finalColor, vec3(0.299, 0.587, 0.114));\n" +
-                "       finalColor = mix(vec3(lum), finalColor, 1.48);\n" +
-                "       gl_FragColor = vec4(finalColor, 1.0) * alpha;" +
+                "       finalColor.r = mix(lum, finalColor.r, 1.18);\n" +
+                "       finalColor.g = mix(lum, finalColor.g, 1.25);\n" +
+                "       finalColor.b = mix(lum, finalColor.b, 1.30);\n" +
+
+                "       gl_FragColor = vec4(finalColor, 1.0) * alpha;\n" +
                 "   } else {\n" +
-                "       gl_FragColor = vec4(1, 1, 1, alpha);\n" +
+                "       gl_FragColor = vec4(1.0, 1.0, 1.0, alpha);\n" +
                 "   }\n" +
                 "}\n";
     }
@@ -3668,9 +3723,25 @@ public class InstantCameraView extends FrameLayout implements NotificationCenter
                     "uniform samplerExternalOES sTexture;\n" +
                     "void main() {\n" +
                     "   vec4 textColor = texture2D(sTexture, vTextureCoord);\n" +
-                    "   textColor.rgb = pow(textColor.rgb, vec3(1.22));\n" +
+
+                    "   // --- SHARPENING ---\n" +
+                    "   vec2 c_onePixel = 1.0 / preview;\n" +
+                    "   vec2 offset = c_onePixel * 1.5;\n" +
+                    "   vec3 top    = texture2D(sTexture, vTextureCoord + vec2(0.0, offset.y)).rgb;\n" +
+                    "   vec3 bottom = texture2D(sTexture, vTextureCoord + vec2(0.0, -offset.y)).rgb;\n" +
+                    "   vec3 left   = texture2D(sTexture, vTextureCoord + vec2(-offset.x, 0.0)).rgb;\n" +
+                    "   vec3 right  = texture2D(sTexture, vTextureCoord + vec2(offset.x, 0.0)).rgb;\n" +
+                    "   float sharp = 0.65;\n" +
+                    "   textColor.rgb = textColor.rgb * (1.0 + 4.0 * sharp) - (top + bottom + left + right) * sharp;\n" +
+                    "   textColor.rgb = clamp(textColor.rgb, 0.0, 1.0);\n" +
+
+                    "   // --- COLOR CORRECTION ---\n" +
+                    "   textColor.rgb = pow(textColor.rgb, vec3(1.12));\n" +
                     "   float luminance = dot(textColor.rgb, vec3(0.299, 0.587, 0.114));\n" +
-                    "   textColor.rgb = mix(vec3(luminance), textColor.rgb, 1.48);\n" +
+                    "   textColor.r = mix(luminance, textColor.r, 1.18);\n" +
+                    "   textColor.g = mix(luminance, textColor.g, 1.25);\n" +
+                    "   textColor.b = mix(luminance, textColor.b, 1.30);\n" +
+
                     "   gl_FragColor = vec4(textColor.rgb * alpha, alpha);\n" +
                     "}\n";
         }
@@ -3696,9 +3767,24 @@ public class InstantCameraView extends FrameLayout implements NotificationCenter
                 "   vec4 x1 = mix(tl, tr, frac.x);\n" +
                 "   vec4 x2 = mix(bl, br, frac.x);\n" +
                 "   vec3 finalColor = mix(x1.rgb, x2.rgb, frac.y);\n" +
-                "   finalColor = pow(finalColor, vec3(1.22));\n" +
+
+                "   // --- SHARPENING ---\n" +
+                "   vec2 offset = c_onePixel * 1.5;\n" +
+                "   vec3 top    = texture2D(sTexture, uv + vec2(0.0, offset.y)).rgb;\n" +
+                "   vec3 bottom = texture2D(sTexture, uv + vec2(0.0, -offset.y)).rgb;\n" +
+                "   vec3 left   = texture2D(sTexture, uv + vec2(-offset.x, 0.0)).rgb;\n" +
+                "   vec3 right  = texture2D(sTexture, uv + vec2(offset.x, 0.0)).rgb;\n" +
+                "   float sharp = 0.45;\n" +
+                "   finalColor = finalColor * (1.0 + 4.0 * sharp) - (top + bottom + left + right) * sharp;\n" +
+                "   finalColor = clamp(finalColor, 0.0, 1.0);\n" +
+
+                "   // --- COLOR CORRECTION ---\n" +
+                "   finalColor = pow(finalColor, vec3(1.12));\n" +
                 "   float lum = dot(finalColor, vec3(0.299, 0.587, 0.114));\n" +
-                "   finalColor = mix(vec3(lum), finalColor, 1.48);\n" +
+                "   finalColor.r = mix(lum, finalColor.r, 1.18);\n" +
+                "   finalColor.g = mix(lum, finalColor.g, 1.25);\n" +
+                "   finalColor.b = mix(lum, finalColor.b, 1.30);\n" +
+
                 "   gl_FragColor = vec4(finalColor, 1.0) * alpha;\n" +
                 "}\n";
     }
@@ -3877,9 +3963,13 @@ public class InstantCameraView extends FrameLayout implements NotificationCenter
     public interface Delegate {
 
         View getFragmentView();
+
         void sendMedia(MediaController.PhotoEntry entry, VideoEditedInfo videoEditedInfo, boolean notify, int scheduleDate, int scheduleRepeatPeriod, boolean b1, long stars);
+
         Activity getParentActivity();
+
         int getClassGuid();
+
         long getDialogId();
 
         default boolean isSecretChat() {

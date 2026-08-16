@@ -911,6 +911,12 @@ public class CameraController implements MediaRecorder.OnInfoListener {
         List<Size> bigEnough = new ArrayList<>(choices.size());
         int w = aspectRatio.getWidth();
         int h = aspectRatio.getHeight();
+
+        if (w == 16 && h == 9) {
+            w = 4;
+            h = 3;
+        }
+
         for (int a = 0; a < choices.size(); a++) {
             Size option = choices.get(a);
             if (notBigger && (option.getHeight() > height || option.getWidth() > width)) {

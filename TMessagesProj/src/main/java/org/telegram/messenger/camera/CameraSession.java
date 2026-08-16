@@ -273,7 +273,7 @@ public class CameraSession {
                     }
                     maxZoom = params.getMaxZoom();
 
-                    String desiredMode = Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE;
+                    String desiredMode = Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO;
                     if (params.getSupportedFocusModes().contains(desiredMode)) {
                         params.setFocusMode(desiredMode);
                     } else {

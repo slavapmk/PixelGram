@@ -1,0 +1,88 @@
+name: Build PixelGram
+
+on:
+  push:
+    branches:
+      - master # Замени на main, если у тебя основная ветка называется main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    # Права нужны для автоматического создания релиза
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # В твоих логах выше мелькала Java 21, поэтому ставим её
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Prepare Keystore and google-services.json
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          # 1. Декодируем keystore из base64 в файл
+          echo $KEYSTORE_BASE64 | base64 --decode > release.keystore
+          
+          # 2. Создаем файл google-services.json из секрета
+          echo "$GOOGLE_SERVICES_JSON" > TMessagesProj_App/google-services.json
+          
+          # Если сборка попросит пустой Huawei-конфиг, можно раскомментировать строку ниже:
+          # echo "{}" > TMessagesProj_AppHuawei/agconnect-services.json
+
+      - name: Configure Signing in gradle.properties
+        run: |
+          # Телеграм читает ключи из gradle.properties, поэтому безопасно дописываем их туда
+          cat << EOF >> gradle.properties
+          RELEASE_STORE_FILE=${{ github.workspace }}/release.keystore
+          RELEASE_STORE_PASSWORD=${{ secrets.STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS=${{ secrets.KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}
+          EOF
+
+      - name: Build PixelGram APK
+        run: |
+          chmod +x gradlew
+          ./gradlew :TMessagesProj_App:assembleAfatRelease -x test -x :TMessagesProj_AppTests:generateScheme
+
+      - name: Prepare APK and Tag
+        id: prep
+        run: |
+          # Ищем собранный APK и переименовываем
+          APK_PATH=$(find TMessagesProj_App/build/outputs/apk/afat/release -name "*.apk" | head -n 1)
+          mv "$APK_PATH" PixelGram.apk
+          
+          # Достаем название коммита
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          
+          # Делаем из названия безопасный тег (меняем пробелы на дефисы, убираем спецсимволы)
+          SAFE_TAG=$(echo "$COMMIT_MSG" | head -n 1 | tr '[:upper:]' '[:lower:]' | sed -e 's/[^a-z0-9]/-/g' -e 's/--*/-/g' -e 's/^-//' -e 's/-$//')
+          
+          # Если коммит был пустой или из одних спецсимволов, используем хэш коммита
+          if [ -z "$SAFE_TAG" ]; then
+            SAFE_TAG=${GITHUB_SHA::7}
+          fi
+          
+          # Добавляем короткий хэш в конец, чтобы избежать ошибки, если ты сделаешь два коммита с одинаковым названием
+          FINAL_TAG="${SAFE_TAG}-${GITHUB_SHA::5}"
+          
+          echo "TAG_NAME=$FINAL_TAG" >> $GITHUB_ENV
+          echo "RELEASE_NAME=$COMMIT_MSG" >> $GITHUB_ENV
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          name: ${{ env.RELEASE_NAME }}
+          files: PixelGram.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
