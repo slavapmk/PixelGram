@@ -64,7 +64,7 @@ jobs:
       - name: Build PixelGram APK
         run: |
           chmod +x gradlew
-          ./gradlew :TMessagesProj_App:assembleAfatRelease -x test -x :TMessagesProj_AppTests:generateScheme --build-cache
+          ./gradlew :TMessagesProj_AppStandalone:assembleAfatRelease -x test -x :TMessagesProj_AppTests:generateScheme --build-cache
 
       - name: Prepare APK and Tag
         id: prep
