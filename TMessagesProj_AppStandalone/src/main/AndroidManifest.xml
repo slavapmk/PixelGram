@@ -3,12 +3,18 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:installLocation="auto">
 
-    <application android:name="org.telegram.messenger.ApplicationLoaderImpl" tools:replace="name">
+    <application
+        android:name="org.telegram.messenger.ApplicationLoaderImpl"
+        android:label="PixelGram"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        tools:replace="android:name,android:label,android:icon,android:roundIcon">
+
         <service
             android:name="org.telegram.messenger.GoogleVoiceClientService"
             android:exported="true"
             android:foregroundServiceType="dataSync"
-        />
+            />
         <activity
             android:name="org.telegram.messenger.GoogleVoiceClientActivity"
             android:exported="true">
@@ -24,6 +30,6 @@
             android:enabled="true"
             android:exported="true"
             android:foregroundServiceType="dataSync|remoteMessaging"
-        />
+            />
     </application>
 </manifest>

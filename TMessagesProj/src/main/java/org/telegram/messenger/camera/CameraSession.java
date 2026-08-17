@@ -250,22 +250,41 @@ public class CameraSession {
                     params.setRecordingHint(true);
 
                     List<int[]> fpsRanges = params.getSupportedPreviewFpsRange();
+                    int[] bestRange = null;
 
-                    int[] selected = null;
-                    for (int[] range : fpsRanges) {
-                        if (range[0] <= 30000 && range[1] >= 30000) {
-                            selected = range;
-                            break;
+                    if (fpsRanges != null) {
+                        for (int[] range : fpsRanges) {
+                            int minFps = range[0];
+                            int maxFps = range[1];
+
+                            if (maxFps > 60000) {
+                                continue;
+                            }
+
+                            if (bestRange == null) {
+                                bestRange = range;
+                            } else {
+                                if (maxFps > bestRange[1]) {
+                                    bestRange = range;
+                                }
+                                else if (maxFps == bestRange[1] && minFps > bestRange[0]) {
+                                    bestRange = range;
+                                }
+                            }
+                        }
+
+                        if (bestRange == null && !fpsRanges.isEmpty()) {
+                            bestRange = fpsRanges.get(0);
                         }
                     }
 
-                    if (selected != null) {
-                        params.setPreviewFpsRange(selected[0], selected[1]);
+                    if (bestRange != null) {
+                        params.setPreviewFpsRange(bestRange[0], bestRange[1]);
                     }
 
                     try {
                         if (params.isVideoStabilizationSupported()) {
-                            params.setVideoStabilization(false);
+                            params.setVideoStabilization(false); // Выключаем стаб, чтобы не было желе при записи
                         }
                     } catch (Exception e) {
                         FileLog.e(e);
