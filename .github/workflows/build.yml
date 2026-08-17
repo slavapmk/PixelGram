@@ -56,7 +56,6 @@ jobs:
           echo $KEYSTORE_BASE64 | base64 --decode > TMessagesProj/config/release.keystore          
           
           # Копируем свежий JSON от Firebase прямо в папки модулей, чтобы плагин их увидел
-          echo "$GOOGLE_SERVICES_JSON" > TMessagesProj/google-services.json
           echo "$GOOGLE_SERVICES_JSON" > TMessagesProj_AppStandalone/google-services.json
           echo "$GOOGLE_SERVICES_JSON" > TMessagesProj_App/google-services.json
 
