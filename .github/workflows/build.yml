@@ -63,27 +63,39 @@ jobs:
           chmod +x gradlew
           ./gradlew :TMessagesProj_AppStandalone:assembleAfatRelease -x test -x :TMessagesProj_AppTests:generateScheme --build-cache
 
-      - name: Prepare APK and Tag
+      - name: Prepare and Sign APK
         id: prep
         run: |
-          echo "=== Поиск всех сгенерированных APK в проекте ==="
-          find . -type f -name "*.apk" || true
-          
+          echo "=== Поиск сгенерированного APK ==="
           APK_PATH=$(find TMessagesProj_AppStandalone/build/outputs -type f -name "*.apk" 2>/dev/null | grep -v "unaligned" | head -n 1 || true)
           
           if [ -z "$APK_PATH" ]; then
-            echo "APK файл не найден"
-            echo "Вывожу структуру папки build для отладки:"
-            ls -R TMessagesProj_AppStandalone/build || true
+            echo "APK не найден!"
             exit 1
           fi
           
           echo "APK: $APK_PATH"
-          mv "$APK_PATH" PixelGram.apk
+          
+          echo "=== Оптимизация и принудительная подпись APK (V2/V3) ==="
+          # Ищем утилиты Android SDK на сервере GitHub
+          BUILD_TOOLS_DIR=$(ls -1d $ANDROID_HOME/build-tools/* | tail -n 1)
+          
+          # Выравниваем APK (обязательное требование перед подписью)
+          $BUILD_TOOLS_DIR/zipalign -v -p -f 4 "$APK_PATH" PixelGram-aligned.apk
+          
+          # Жестко подписываем файл нашими ключами из Secrets
+          $BUILD_TOOLS_DIR/apksigner sign \
+            --ks TMessagesProj/config/release.keystore \
+            --ks-key-alias "${{ secrets.KEY_ALIAS }}" \
+            --ks-pass "pass:${{ secrets.STORE_PASSWORD }}" \
+            --key-pass "pass:${{ secrets.KEY_PASSWORD }}" \
+            PixelGram-aligned.apk
+          
+          mv PixelGram-aligned.apk PixelGram.apk
           
           echo "=== Парсинг версии из gradle.properties ==="
-          # Ищем APP_VERSION_NAME в файле gradle.properties и очищаем от возможных спецсимволов \r
           VERSION_NAME=$(grep -oP '^APP_VERSION_NAME=\K.*' gradle.properties | tr -d '\r' || true)
+          if [ -z "$VERSION_NAME" ]; then VERSION_NAME="12.9.2"; fi
           
           FINAL_TAG="v${VERSION_NAME}"
           echo "Тег релиза: $FINAL_TAG"
