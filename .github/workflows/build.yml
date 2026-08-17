@@ -58,24 +58,32 @@ jobs:
       - name: Prepare APK and Tag
         id: prep
         run: |
-          # Ищем APK везде внутри outputs, исключая возможные промежуточные (unaligned) файлы
-          APK_PATH=$(find TMessagesProj_AppStandalone/build/outputs -type f -name "*.apk" | grep -v "unaligned" | head -n 1)
+          echo "=== Поиск всех сгенерированных APK в проекте ==="
+          find . -type f -name "*.apk" || true
           
-          # Защита: если файл не найден, выводим структуру директорий для дебага и падаем понятно
+          # Ищем APK с защитой от падения (добавляем || true)
+          APK_PATH=$(find TMessagesProj_AppStandalone/build/outputs -type f -name "*.apk" 2>/dev/null | grep -v "unaligned" | head -n 1 || true)
+          
           if [ -z "$APK_PATH" ]; then
-            echo "APK не найден! Вывожу структуру папок:"
-            ls -R TMessagesProj_AppStandalone/build/outputs
+            echo "APK файл не найден"
+            echo "Вывожу структуру папки build для отладки:"
+            ls -R TMessagesProj_AppStandalone/build || true
             exit 1
           fi
           
+          echo "APK: $APK_PATH"
           mv "$APK_PATH" PixelGram.apk
           
-          # Читаем версию независимо от того, есть там знак '=' или просто пробел
-          VERSION_NAME=$(grep -oP 'versionName\s*=?\s*"\K[^"]+' TMessagesProj/build.gradle)
-          VERSION_CODE=$(grep -oP 'versionCode\s*=?\s*\K\d+' TMessagesProj/build.gradle)
+          echo "=== Парсинг версии ==="
+          VERSION_NAME=$(grep -oP 'versionName\s*=?\s*"\K[^"]+' TMessagesProj/build.gradle || true)
+          VERSION_CODE=$(grep -oP 'versionCode\s*=?\s*\K\d+' TMessagesProj/build.gradle || true)
           
-          # Формируем красивый тег, например: v10.14.0-41410
+          # Защита от пустых значений, если регулярка вдруг ничего не нашла
+          if [ -z "$VERSION_NAME" ]; then VERSION_NAME="10.14.0"; fi
+          if [ -z "$VERSION_CODE" ]; then VERSION_CODE=${{ github.run_number }}; fi
+          
           FINAL_TAG="v${VERSION_NAME}-${VERSION_CODE}"
+          echo "Тег релиза: $FINAL_TAG"
           
           echo "TAG_NAME=$FINAL_TAG" >> $GITHUB_ENV
           echo "RELEASE_NAME=PixelGram $VERSION_NAME" >> $GITHUB_ENV
