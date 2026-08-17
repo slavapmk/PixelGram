@@ -77,29 +77,23 @@ public class PixelGramUpdater {
                         return;
                     }
 
-                    int remoteVersionCode = 0;
-                    try {
-                        String[] parts = tagName.split("-");
-                        if (parts.length > 1) {
-                            remoteVersionCode = Integer.parseInt(parts[parts.length - 1]);
-                        }
-                    } catch (Exception e) {
-                        FileLog.e("PixelGramUpdater: Ошибка парсинга тега " + tagName);
-                    }
+                    // Очищаем тег от "v" (например: v10.14.0.1 -> 10.14.0.1)
+                    String remoteVersionName = tagName.replace("v", "").trim();
 
-                    int currentVersionCode = 0;
+                    String currentVersionName = "0.0.0";
                     try {
                         android.content.pm.PackageInfo pInfo = ApplicationLoader.applicationContext
                                 .getPackageManager()
                                 .getPackageInfo(ApplicationLoader.applicationContext.getPackageName(), 0);
-                        currentVersionCode = pInfo.versionCode;
+                        currentVersionName = pInfo.versionName;
                     } catch (Exception e) {
                         FileLog.e(e);
                     }
 
-                    if (remoteVersionCode > currentVersionCode && remoteVersionCode != 0) {
+                    // Умное сравнение версий по точкам (например, 10.14.1 > 10.14.0.1)
+                    if (compareVersions(remoteVersionName, currentVersionName) > 0) {
                         TLRPC.TL_help_appUpdate update = new TLRPC.TL_help_appUpdate();
-                        update.version = tagName.split("-")[0].replace("v", "");
+                        update.version = remoteVersionName; // Отдаем чистую версию в UI
                         update.text = body;
                         update.can_not_skip = false;
                         update.document = new TLRPC.TL_document();
@@ -278,5 +272,23 @@ public class PixelGramUpdater {
         } catch (Exception e) {
             FileLog.e(e);
         }
+    }
+
+    // Метод для умного сравнения версий (например, 10.14.1 > 10.14.0.5)
+    private static int compareVersions(String v1, String v2) {
+        try {
+            String[] parts1 = v1.replaceAll("[^0-9.]", "").split("\\.");
+            String[] parts2 = v2.replaceAll("[^0-9.]", "").split("\\.");
+            int max = Math.max(parts1.length, parts2.length);
+            for (int i = 0; i < max; i++) {
+                int p1 = i < parts1.length && !parts1[i].isEmpty() ? Integer.parseInt(parts1[i]) : 0;
+                int p2 = i < parts2.length && !parts2[i].isEmpty() ? Integer.parseInt(parts2[i]) : 0;
+                if (p1 < p2) return -1;
+                if (p1 > p2) return 1;
+            }
+        } catch (Exception e) {
+            FileLog.e(e);
+        }
+        return 0; // Версии равны
     }
 }

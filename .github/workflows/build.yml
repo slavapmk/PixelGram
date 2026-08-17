@@ -76,13 +76,8 @@ jobs:
           
           echo "=== Парсинг версии ==="
           VERSION_NAME=$(grep -oP 'versionName\s*=?\s*"\K[^"]+' TMessagesProj/build.gradle || true)
-          VERSION_CODE=$(grep -oP 'versionCode\s*=?\s*\K\d+' TMessagesProj/build.gradle || true)
           
-          # Защита от пустых значений, если регулярка вдруг ничего не нашла
-          if [ -z "$VERSION_NAME" ]; then VERSION_NAME="10.14.0"; fi
-          if [ -z "$VERSION_CODE" ]; then VERSION_CODE=${{ github.run_number }}; fi
-          
-          FINAL_TAG="v${VERSION_NAME}-${VERSION_CODE}"
+          FINAL_TAG="v${VERSION_NAME}"
           echo "Тег релиза: $FINAL_TAG"
           
           echo "TAG_NAME=$FINAL_TAG" >> $GITHUB_ENV
