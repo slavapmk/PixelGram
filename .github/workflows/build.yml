@@ -36,11 +36,17 @@ jobs:
             TMessagesProj/.cxx/
             TMessagesProj/build/
             TMessagesProj_AppStandalone/build/
-
           key: ${{ runner.os }}-tg-cxx-${{ github.ref_name }}-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-tg-cxx-${{ github.ref_name }}-
             ${{ runner.os }}-tg-cxx-
+
+      - name: Pre-install and backdate NDK (C++ Cache Hack)
+        run: |
+          echo "Устанавливаем NDK заранее..."
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;27.2.12479018"
+          echo "Откатываем время NDK в 2000 год, чтобы обмануть компилятор CMake..."
+          find $ANDROID_HOME/ndk -type f -exec touch -d "2000-01-01 00:00:00" {} +
 
       - name: Prepare Keystore and google-services.json
         env:
@@ -76,14 +82,10 @@ jobs:
           
           echo "APK: $APK_PATH"
           
-          echo "=== Оптимизация и принудительная подпись APK (V2/V3) ==="
-          # Ищем утилиты Android SDK на сервере GitHub
           BUILD_TOOLS_DIR=$(ls -1d $ANDROID_HOME/build-tools/* | tail -n 1)
           
-          # Выравниваем APK (обязательное требование перед подписью)
           $BUILD_TOOLS_DIR/zipalign -v -p -f 4 "$APK_PATH" PixelGram-aligned.apk
           
-          # Жестко подписываем файл нашими ключами из Secrets
           $BUILD_TOOLS_DIR/apksigner sign \
             --ks TMessagesProj/config/release.keystore \
             --ks-key-alias "${{ secrets.KEY_ALIAS }}" \
