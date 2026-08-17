@@ -15,6 +15,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Restore Git file modification times
+        uses: chetan/git-restore-mtime-action@v2
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -31,9 +36,11 @@ jobs:
             TMessagesProj/.cxx/
             TMessagesProj/build/
             TMessagesProj_AppStandalone/build/
-          key: ${{ runner.os }}-tg-build-${{ github.sha }}
+
+          key: ${{ runner.os }}-tg-cxx-${{ github.ref_name }}-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-tg-build-
+            ${{ runner.os }}-tg-cxx-${{ github.ref_name }}-
+            ${{ runner.os }}-tg-cxx-
 
       - name: Prepare Keystore and google-services.json
         env:
@@ -42,6 +49,7 @@ jobs:
         run: |
           echo $KEYSTORE_BASE64 | base64 --decode > TMessagesProj/config/release.keystore          
           echo "$GOOGLE_SERVICES_JSON" > google-services.json
+
       - name: Configure Signing in gradle.properties
         run: |
           cat << EOF >> gradle.properties
